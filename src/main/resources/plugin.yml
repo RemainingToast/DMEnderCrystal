@@ -1,0 +1,6 @@
+name: DMEnderCrystal
+version: ${project.version}
+main: com.au2b2t.dmendercrystal.DMEnderCrystal
+api-version: 1.16
+depend:
+  - DeathMessages
