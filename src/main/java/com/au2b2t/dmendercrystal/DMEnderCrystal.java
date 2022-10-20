@@ -1,8 +1,18 @@
 package com.au2b2t.dmendercrystal;
 
-import com.au2b2t.deathmessages.*;
+import com.au2b2t.deathmessages.ConfigTooOldException;
+import com.au2b2t.deathmessages.DMPReloadEvent;
+import com.au2b2t.deathmessages.DeathMessageCustomEvent;
+import com.au2b2t.deathmessages.DeathPreDMPEvent;
+import com.faris.kingkits.KingKits;
+import com.faris.kingkits.hook.VaultAPI;
+import me.confuser.killstreaks.KillStreaks;
+import me.iiSnipez.CombatLog.CombatLog;
+import me.iiSnipez.CombatLog.Events.PlayerTagEvent;
+import org.au2b2t.pumpkinpvp.PumpkinDamageEvent;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
+import org.bukkit.World;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockFace;
 import org.bukkit.block.BlockState;
@@ -11,7 +21,6 @@ import org.bukkit.configuration.InvalidConfigurationException;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.entity.EnderCrystal;
 import org.bukkit.entity.Entity;
-import org.bukkit.entity.EntityType;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -35,18 +44,33 @@ public final class DMEnderCrystal extends JavaPlugin implements Listener {
 
     private static final String CRYSTAL_KILL_TAG = "natural.EnderCrystalKill";
     private static final String CRYSTAL_SUICIDE_TAG = "natural.EnderCrystalSuicide";
+
+    private static final String PUMPKIN_KILL_TAG = "natural.PumpkinKill";
+    private static final String PUMPKIN_SUICIDE_TAG = "natural.PumpkinSuicide";
     private static final String BED_KILL_TAG = "natural.BedKill";
     private static final String BED_SUICIDE_TAG = "natural.BedSuicide";
 
     private boolean BED_ENABLED = false;
+    private boolean PUMPKIN_ENABLED = false;
     private boolean TRACK_PLACER_NOT_HITTER = true;
     private boolean TRACK_BED_PLACER_NOT_HITTER = true;
 
+    private final Map<UUID, UUID> PUMPKIN_KILL;
     private final Map<UUID, UUID> END_CRYSTAL_KILL;
     private final Map<UUID, UUID> BED_KILL;
     private static Set<String> BED_TYPES;
 
+    private boolean COMBAT_LOG_HOOK = false;
+    private CombatLog COMBAT_LOG_PLUGIN = null;
+
+    private boolean KILLSTREAKS_HOOK = false;
+    private KillStreaks KILLSTREAKS_PLUGIN = null;
+
+    private boolean KINGKITS_HOOK = false;
+    private KingKits KINGKITS_PLUGIN = null;
+
     public DMEnderCrystal() {
+        PUMPKIN_KILL = new HashMap<>();
         END_CRYSTAL_KILL = new HashMap<>();
         BED_KILL = new HashMap<>();
         BED_TYPES = new HashSet<>();
@@ -88,6 +112,30 @@ public final class DMEnderCrystal extends JavaPlugin implements Listener {
                     "expects getVersion() to return a string " +
                     "containing '(MC: 1.15)' or similar. The version " +
                     "DMP tried to parse was '" + Bukkit.getServer().getVersion() + "'");
+        }
+
+        if (getServer().getPluginManager().getPlugin("CombatLog") != null &&
+            getServer().getPluginManager().getPlugin("CombatLog") instanceof CombatLog
+        ) {
+            getLogger().info("CombatLog detected. Enabling hook...");
+            this.COMBAT_LOG_PLUGIN = (CombatLog) getServer().getPluginManager().getPlugin("CombatLog");
+            this.COMBAT_LOG_HOOK = true;
+        }
+
+        if (getServer().getPluginManager().getPlugin("KillStreaks") != null &&
+                getServer().getPluginManager().getPlugin("KillStreaks") instanceof KillStreaks
+        ) {
+            getLogger().info("KillStreaks detected. Enabling hook...");
+            this.KILLSTREAKS_PLUGIN = (KillStreaks) getServer().getPluginManager().getPlugin("KillStreaks");
+            this.KILLSTREAKS_HOOK = true;
+        }
+
+        if (getServer().getPluginManager().getPlugin("KingKits") != null &&
+            getServer().getPluginManager().getPlugin("KingKits") instanceof KingKits
+        ) {
+            getLogger().info("KingKits detected. Enabling hook...");
+            this.KINGKITS_PLUGIN = (KingKits) getServer().getPluginManager().getPlugin("KingKits");
+            this.KINGKITS_HOOK = true;
         }
     }
 
@@ -143,7 +191,9 @@ public final class DMEnderCrystal extends JavaPlugin implements Listener {
                 this.setEnabled(false);
             }
         }
+
         BED_ENABLED = config.getBoolean("use-bed-messages", false);
+        PUMPKIN_ENABLED = config.getBoolean("use-pumpkin-messages", false);
         TRACK_PLACER_NOT_HITTER = config.getBoolean("track-placer-not-hitter", true);
         TRACK_BED_PLACER_NOT_HITTER = config.getBoolean("track-bed-placer-not-hitter", true);
     }
@@ -160,15 +210,21 @@ public final class DMEnderCrystal extends JavaPlugin implements Listener {
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    public void onBlockPlace(final BlockPlaceEvent event)
-    {
-        if (isBed(event.getBlockPlaced().getType())) {
-            String us = event.getPlayer().getUniqueId().toString();
-            Block b = event.getBlockPlaced();
-            b.setMetadata("dmp.bedPlacer", new FixedMetadataValue(this, us));
-            b = getOtherBedBlock(event, b);
-            if (isBed(b.getType()))
+    public void onBlockPlace(final BlockPlaceEvent event) {
+        String us = event.getPlayer().getUniqueId().toString();
+        Block b = event.getBlockPlaced();
+        if (b.getWorld().getEnvironment() == World.Environment.NETHER || b.getWorld().getEnvironment() == World.Environment.THE_END) {
+            if (isBed(event.getBlockPlaced().getType())) {
                 b.setMetadata("dmp.bedPlacer", new FixedMetadataValue(this, us));
+                b = getOtherBedBlock(event, b);
+                if (isBed(b.getType())) {
+                    b.setMetadata("dmp.bedPlacer", new FixedMetadataValue(this, us));
+                }
+            }
+        }
+
+        if (event.getBlockPlaced().getType() == Material.PUMPKIN) {
+            b.setMetadata("dmp.pumpkinPlacer", new FixedMetadataValue(this, us));
         }
     }
 
@@ -212,8 +268,9 @@ public final class DMEnderCrystal extends JavaPlugin implements Listener {
     private BlockFace getBedOrientationRawData(Block block, BlockState newState) {
         byte b =  newState.getRawData();
         BlockFace orientation = (new BlockFace[] {BlockFace.SOUTH, BlockFace.WEST, BlockFace.NORTH, BlockFace.EAST})[b & 3];
-        if ((b & 8) != 0)
+        if ((b & 8) != 0) {
             orientation = orientation.getOppositeFace();
+        }
         return orientation;
     }
 
@@ -221,39 +278,56 @@ public final class DMEnderCrystal extends JavaPlugin implements Listener {
     public void onPlayerInteract(final PlayerInteractEvent event) {
         // track players who place ender crystals
         if (Action.RIGHT_CLICK_BLOCK == event.getAction()) {
-            if (Material.OBSIDIAN == event.getClickedBlock().getType() || Material.BEDROCK == event.getClickedBlock().getType()) {
+            final Block clickedBlock = event.getClickedBlock();
+            if (clickedBlock == null) return;
+            if (Material.OBSIDIAN == clickedBlock.getType() || Material.BEDROCK == clickedBlock.getType()) {
                 if (Material.END_CRYSTAL == event.getMaterial()) {
-                    Bukkit.getScheduler().runTaskAsynchronously(this, () -> {
-                        List<Entity> entities = event.getPlayer().getNearbyEntities(5, 5, 5);
-
-                        for (Entity entity : entities) {
-                            if (EntityType.ENDER_CRYSTAL == entity.getType()) {
+                    getServer().getScheduler().runTask(this, () -> {
+                        event.getPlayer().getNearbyEntities(5, 5, 5).forEach(entity -> {
+                            if (entity instanceof EnderCrystal) {
                                 EnderCrystal crystal = (EnderCrystal) entity;
                                 Block belowCrystal = crystal.getLocation().getBlock().getRelative(BlockFace.DOWN);
 
-                                if (event.getClickedBlock().equals(belowCrystal) && crystal.getTicksLived() < 3) {
+                                if (clickedBlock.equals(belowCrystal) && crystal.getTicksLived() < 3) {
                                     crystal.setMetadata("dmp.enderCrystalPlacer", new FixedMetadataValue(this, event.getPlayer().getUniqueId().toString()));
                                 }
                             }
+                        });
+                        if (COMBAT_LOG_HOOK && COMBAT_LOG_PLUGIN != null) {
+                            clickedBlock.getWorld().getNearbyPlayers(clickedBlock.getLocation(), 8).forEach(tagged -> {
+                                if (event.getPlayer() != tagged) {
+                                    PlayerTagEvent tag = new PlayerTagEvent(event.getPlayer(), tagged, COMBAT_LOG_PLUGIN.tagDuration);
+                                    getServer().getPluginManager().callEvent(tag);
+                                }
+                            });
                         }
                     });
                 }
-            }
-            else if (isBed(event.getClickedBlock().getType())) {
+            } else if (isBed(clickedBlock.getType()) && (clickedBlock.getWorld().getEnvironment() == World.Environment.NETHER || clickedBlock.getWorld().getEnvironment() == World.Environment.THE_END)) {
                 UUID u = event.getPlayer().getUniqueId();
                 if (TRACK_BED_PLACER_NOT_HITTER) {
                     u = null;
                     Block b = event.getClickedBlock();
-                    if (b != null && b.hasMetadata("dmp.bedPlacer") && b.getMetadata("dmp.bedPlacer").size() > 0)
+                    if (b != null && b.hasMetadata("dmp.bedPlacer") && b.getMetadata("dmp.bedPlacer").size() > 0) {
                         u = UUID.fromString(b.getMetadata("dmp.bedPlacer").get(0).asString());
-                }
-                if (u != null)
-                    for (Entity e: event.getClickedBlock().getWorld().getNearbyEntities(event.getClickedBlock().getLocation(), 8, 8, 8)) {
-                        if (e instanceof Player) {
-                            Player p = (Player)e;
-                            BED_KILL.put(p.getUniqueId(), u);
-                        }
                     }
+                }
+                if (u != null) {
+                    UUID finalU = u;
+                    getServer().getScheduler().runTask(this, () -> clickedBlock.getWorld().getNearbyEntities(clickedBlock.getLocation(), 8, 8, 8).forEach(entity -> {
+                        if (entity instanceof Player) {
+                            Player p = (Player) entity;
+                            if (COMBAT_LOG_HOOK && COMBAT_LOG_PLUGIN != null) {
+                                Player tagged = getServer().getPlayer(finalU);
+                                if (p != tagged) {
+                                    PlayerTagEvent tag = new PlayerTagEvent(p, tagged, COMBAT_LOG_PLUGIN.tagDuration);
+                                    getServer().getPluginManager().callEvent(tag);
+                                }
+                            }
+                            BED_KILL.put(p.getUniqueId(), finalU);
+                        }
+                    }));
+                }
             }
         }
     }
@@ -294,9 +368,54 @@ public final class DMEnderCrystal extends JavaPlugin implements Listener {
     }
 
     @EventHandler
+    public void on(PumpkinDamageEvent e) {
+        if (e.getDamager() == null) return;
+        if (e.getEntity() instanceof Player && e.getCause() == EntityDamageEvent.DamageCause.BLOCK_EXPLOSION) {
+            Block block = e.getDamager();
+            UUID uuid = null;
+            if (block.hasMetadata("dmp.pumpkinPlacer") && block.getMetadata("dmp.pumpkinPlacer").size() > 0) {
+                uuid = UUID.fromString(block.getMetadata("dmp.pumpkinPlacer").get(0).asString());
+            }
+
+//            getLogger().info(String.format("uuid=%s", uuid));
+
+            if (uuid != null /* && (e.getEntity().isDead() || (((Player) e.getEntity()).getHealth() - e.getDamage()) <= 0) */) {
+                // store killer player
+                PUMPKIN_KILL.put(e.getEntity().getUniqueId(), uuid);
+            }
+
+            if (COMBAT_LOG_HOOK && COMBAT_LOG_PLUGIN != null) {
+                if (e.getPumpkinPlacer() != e.getDamagee()) {
+                    PlayerTagEvent tag = new PlayerTagEvent(e.getPumpkinPlacer(), e.getDamagee(), COMBAT_LOG_PLUGIN.tagDuration);
+                    getServer().getPluginManager().callEvent(tag);
+                }
+            }
+        }
+    }
+
+    @EventHandler
     public void preBroadcast(DeathMessageCustomEvent e) {
         UUID u = e.getPlayer().getUniqueId();
-        // apply custom ender crystal kill message
+        UUID u2 = null;
+
+        if (PUMPKIN_ENABLED && PUMPKIN_KILL.containsKey(u)) {
+            UUID ku = PUMPKIN_KILL.get(u);
+            if (ku != null) {
+                Player p = getServer().getPlayer(ku);
+                if (p != null) {
+                    if (p.getUniqueId().equals(u)) {
+                        e.setTag(PUMPKIN_SUICIDE_TAG);
+                    } else {
+                        e.setTag(PUMPKIN_KILL_TAG);
+                        e.setKiller(p.getName());
+                        e.setKiller2(p.getDisplayName());
+                        u2 = p.getUniqueId();
+                    }
+                }
+            }
+            PUMPKIN_KILL.remove(u);
+        }
+
         if (BED_ENABLED && BED_KILL.containsKey(u)) {
             UUID ku = BED_KILL.get(u);
             if (ku != null) {
@@ -308,11 +427,13 @@ public final class DMEnderCrystal extends JavaPlugin implements Listener {
                         e.setTag(BED_KILL_TAG);
                         e.setKiller(p.getName());
                         e.setKiller2(p.getDisplayName());
+                        u2 = p.getUniqueId();
                     }
                 }
             }
             BED_KILL.remove(u);
         }
+
         if (END_CRYSTAL_KILL.containsKey(u)) {
             UUID ku = END_CRYSTAL_KILL.get(u);
             if (ku != null) {
@@ -324,10 +445,30 @@ public final class DMEnderCrystal extends JavaPlugin implements Listener {
                         e.setTag(CRYSTAL_KILL_TAG);
                         e.setKiller(p.getName());
                         e.setKiller2(p.getDisplayName());
+                        u2 = p.getUniqueId();
                     }
                 }
             }
             END_CRYSTAL_KILL.remove(u);
+        }
+
+        if (u2 != null && !u.equals(u2)) {
+            final Player killer = getServer().getPlayer(u2);
+            handleKingKitsDeathEvent(e.getPlayer(), killer);
+            incrementKillstreak(killer);
+        }
+    }
+
+    public void handleKingKitsDeathEvent(final Player player, final Player killer) {
+        if (KINGKITS_HOOK && KINGKITS_PLUGIN != null) {
+            VaultAPI.handleDeathEvent(player, killer);
+        }
+    }
+
+    public void incrementKillstreak(final Player killer) {
+        if (KILLSTREAKS_HOOK && KILLSTREAKS_PLUGIN != null) {
+            KILLSTREAKS_PLUGIN.getApi().incrementKillstreak(killer);
+            getLogger().info(String.format("%s's new killstreak=%s", killer.getName(), KILLSTREAKS_PLUGIN.getApi().getKillstreak(killer)));
         }
     }
 }

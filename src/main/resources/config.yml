@@ -25,3 +25,6 @@ use-bed-messages: true
 # Same as track-placer-not-hitter, but for beds.
 track-bed-placer-not-hitter: true
 
+# Whether to use pumpkin kill/suicide messages and track pumpkin kills.
+use-pumpkin-messages: true
+

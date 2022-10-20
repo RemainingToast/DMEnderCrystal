@@ -54,12 +54,20 @@
 
     <repositories>
         <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
+        <repository>
             <id>papermc-repo</id>
             <url>https://papermc.io/repo/repository/maven-public/</url>
         </repository>
         <repository>
             <id>sonatype</id>
             <url>https://oss.sonatype.org/content/groups/public/</url>
+        </repository>
+        <repository>
+            <id>local-repo</id>
+            <url>file:///${project.basedir}/libs</url>
         </repository>
     </repositories>
 
@@ -71,11 +79,37 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>com.au2b2t</groupId>
+            <groupId>com.github.RemainingToast</groupId>
             <artifactId>DeathMessages</artifactId>
-            <version>-SNAPSHOT</version>
+            <version>main-SNAPSHOT</version>
+        </dependency>
+        <dependency>
+            <groupId>org.au2b2t.pumpkinpvp</groupId>
+            <artifactId>PumpkinPVP</artifactId>
+            <version>1.0.0</version>
             <scope>system</scope>
-            <systemPath>${project.basedir}/libs/DeathMessages-1.0.0.jar</systemPath>
+            <systemPath>${project.basedir}/libs/PumpkinPVP-1.0-SNAPSHOT.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>me.iisnipez.combatlog</groupId>
+            <artifactId>CombatLog</artifactId>
+            <version>1.0.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/CombatLog.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>me.confuser.killstreaks</groupId>
+            <artifactId>KillStreaks</artifactId>
+            <version>1.0.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/KillStreaks.jar</systemPath>
+        </dependency>
+        <dependency>
+            <groupId>com.faris.kingkits</groupId>
+            <artifactId>KingKits</artifactId>
+            <version>1.0.0</version>
+            <scope>system</scope>
+            <systemPath>${project.basedir}/libs/KingKits.jar</systemPath>
         </dependency>
     </dependencies>
 </project>

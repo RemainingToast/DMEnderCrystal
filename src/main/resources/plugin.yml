@@ -2,5 +2,10 @@ name: DMEnderCrystal
 version: ${project.version}
 main: com.au2b2t.dmendercrystal.DMEnderCrystal
 api-version: 1.16
+softdepend:
+  - PumpkinPVP
+  - CombatLog
+  - KingKits
+  - KillStreaks
 depend:
   - DeathMessages
