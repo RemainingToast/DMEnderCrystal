@@ -455,7 +455,7 @@ public final class DMEnderCrystal extends JavaPlugin implements Listener {
         if (u2 != null && !u.equals(u2)) {
             final Player killer = getServer().getPlayer(u2);
             handleKingKitsDeathEvent(e.getPlayer(), killer);
-            incrementKillstreak(killer);
+            incrementKillstreak(e.getPlayer(), killer);
         }
     }
 
@@ -465,9 +465,10 @@ public final class DMEnderCrystal extends JavaPlugin implements Listener {
         }
     }
 
-    public void incrementKillstreak(final Player killer) {
+    public void incrementKillstreak(final Player player, final Player killer) {
         if (KILLSTREAKS_HOOK && KILLSTREAKS_PLUGIN != null) {
             KILLSTREAKS_PLUGIN.getApi().incrementKillstreak(killer);
+            KILLSTREAKS_PLUGIN.getApi().handleDeath(player, killer);
             getLogger().info(String.format("%s's new killstreak=%s", killer.getName(), KILLSTREAKS_PLUGIN.getApi().getKillstreak(killer)));
         }
     }
